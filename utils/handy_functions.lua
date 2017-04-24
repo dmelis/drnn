@@ -43,19 +43,6 @@ function pearson(x, y)
   return x:dot(y) / (x:norm() * y:norm())
 end
 
-function compute_accuracy(pred,gold)
-  -- Pred, gold should be Int Tensors
-  local answered = pred:size(1)
-  local asked = gold:size(1)
-  if (answered < asked) then
-    print('Warning in compute accuracy: not all questions answered')
-  end
-  local total = pred:size(1)
-  local correct = torch.eq(pred,gold:narrow(1,1,total)):sum()
-  return correct/total, correct, total
-end
-
-
 -- Hacky checkpoint function
 
 function bk(message)
@@ -77,51 +64,6 @@ function prompt_continue()
     end
   end
 end
-
--- Compatibility: Lua-5.0
--- function string.split(str, delim, maxNb)
---     -- Eliminate bad cases...
---     if string.find(str, delim) == nil then
---         return { str }
---     end
---     if maxNb == nil or maxNb < 1 then
---         maxNb = 0    -- No limit
---     end
---     local result = {}
---     local pat = "(.-)" .. delim .. "()"
---     local nb = 0
---     local lastPos
---     for part, pos in string.gfind(str, pat) do
---         nb = nb + 1
---         result[nb] = part
---         lastPos = pos
---         if nb == maxNb then break end
---     end
---     -- Handle the last field
---     if nb ~= maxNb then
---         result[nb + 1] = string.sub(str, lastPos)
---     end
---     return result
--- end
-
--- function split(pString, pPattern)
---    local Table = {}  -- NOTE: use {n = 0} in Lua-5.0
---    local fpat = "(.-)" .. pPattern
---    local last_end = 1
---    local s, e, cap = pString:find(fpat, 1)
---    while s do
---       if s ~= 1 or cap ~= "" then
---      table.insert(Table,cap)
---       end
---       last_end = e+1
---       s, e, cap = pString:find(fpat, last_end)
---    end
---    if last_end <= #pString then
---       cap = pString:sub(last_end)
---       table.insert(Table, cap)
---    end
---    return Table
--- end
 
 function equals_any(s,t)
   bool_any = false

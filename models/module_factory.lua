@@ -1,13 +1,11 @@
-
 factory = {}
 --[[
+  Factory for generating DRNN models.
   Requirements:
     - 'DTP' (model 3) can work with or withoutc EOS padding.
     - 'STP' requires EOS padding but not leaf padding.
     - 'NTP' requires EOS padding *and* leaf padding.
-
 ]]
-
 
 function factory.new_recurrent_module(type,in_dim,mem_dim)
   assert(type == 'gru' or type == 'lstm', "DRNN recurrence has to be one of LSTM or GRU")
@@ -150,8 +148,7 @@ end
   distinguish left from right offspring. Everything else is the same.
 ============================================================================]]--
 
-
---- BIG TODO: Models 4 and 5
+--- BIG TODO: Models 4 and 5, just for the sake of completion
 
 --[[
     Model 6: Dual-Topology prediction + distinct L/R depth prediction
@@ -196,21 +193,4 @@ function factory.model_dtp_lr_composer(DM,WM,SC,in_dim,mem_dim,out_dim)
   return cell
 end
 
-
-
-
-
 return factory
-
---[[ Graph version of combination module]]--
--- function DRNN:new_combination_module()
---   local input_frat       = nn.Identity()()
---   local input_ancest     = nn.Identity()()
---   local module = nn.Sequential(
---       nn.Tanh()(
---       nn.CAddTable(){
---       nn.Linear(mem_dim, 2*mem_dim)(input_frat),
---       nn.Linear(mem_dim, 2*mem_dim)(input_ancest)
---     }))
---   return module
--- end

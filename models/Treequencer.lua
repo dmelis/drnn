@@ -51,13 +51,8 @@ function Treequencer:updateOutput(input)
    end
 
    local total_loss = (self.collect_loss) and 0 or nil
-
-   --assert(torch.type(inputTree) == 'table', "expecting input table")
-   --print(values)
-   --print(tree)
    -- Note that the Treequencer hijacks the rho attribute of the rnn
    --TODO: self.module:maxBPTTstep(#inputTable)
-   if self.train ~= false or self.train == false then -- training  NOTE: OR Evaluating. Have no reason to do it different for now.
       if not (self._remember == 'train' or self._remember == 'both') then
          self.module:forget()
       end
@@ -83,53 +78,16 @@ function Treequencer:updateOutput(input)
           -- Get argmax of word softmax
           local maxLogprobs, wt = torch.max(output, 1)
           wt = wt:view(-1):long()
-          -- FIXME: Might need to do something similar to sampleLogprobs to make this work in batch mode too
           local correct_w = (wt[1] == node.label) and '' or 'X'
           debugutils.dprintf(1,'| %6i %4.4f %6s %2s |\n',wt[1], math.exp(maxLogprobs[1]),node.label, correct_w)
           self.output[node.index] = output
           self.logprobs[node.index] = maxLogprobs
-          -- print(total_loss)
-          -- print(loss)
           total_loss = total_loss + loss
         else
           self.output[node.index] = self.module:updateOutput(input[node.index])
         end
       end
       debugutils.debug_topo_pred_header(Debug,self.lr_tree,true)
-   else -- evaluation  -- TODO: Fix this.
-      if not (self._remember == 'eval' or self._remember == 'both') then
-         self.module:forget()
-      end
-      local node_traversal,k = self:getTraversal('forward') -- wil depend on type of tree, should already remove padding and root, etc.
-      bk()
-      -- remove extra tensors
-
-
-
-
-
-      -- during evaluation, recurrent modules reuse memory (i.e. outputs)
-      -- so we need to copy each output into our own table
-      --self.output = tree2tree:Tree():copy(inputTree,"skeleton")
-      -- for innode, outnode in seq.zip(inputTree:depth_first_preorder(),self.output:depth_first_preorder()) do
-      -- --for step, input in ipairs(inputTable) do
-      --    outnode.value = self.module:updateOutput(innode.value)
-      -- end
-
-      -- TODO: Sequencer had this for evaluation. Do I need it?
-      -- for step, input in ipairs(inputTable) do
-      --    self.output[step] = nn.rnn.recursiveCopy(
-      --       self.output[step] or table.remove(self._output, 1),
-      --       self.module:updateOutput(input)
-      --    )
-      -- end
-      -- -- remove extra output tensors (save for later)
-      -- for i=#inputTable+1,#self.output do
-      --    table.insert(self._output, self.output[i])
-      --    self.output[i] = nil
-      -- end
-   end
-   --print('treequencer, input type: ', torch.type(input),'output type: ', torch.type(self.output))
    local outputs = (self.collect_loss) and {self.output, total_loss} or self.output
    return outputs
 end
@@ -157,12 +115,8 @@ function Treequencer:updateGradInput(input, gradOutput)
     end
     debugutils.dprintf(1,'%4i %4i | ', node.index, node.idx)
     self.gradInput[node.index] = self.module:updateGradInput(input[node.index],gradOutput[node.index])
-    --print(  self.gradInput[node.index]); bk()
-    --print('Here6:',torch.type(self.module),input[node.index]:norm(1),gradOutput[node.index]:norm(1),self.gradInput[node.index]:norm())
   end
   debugutils.debug_topo_grad_header(Debug,self.lr_tree, true)
-  -- self.module.module.num_children = nil -- TODO: Add this to clean somewhere. Can't do it here because accGrad needs it still.
-  -- self.module.module.has_brother  = nil
   return self.gradInput
 end
 
@@ -172,9 +126,6 @@ function Treequencer:accGradParameters(input, gradOutput, scale)
   else
     assert(torch.type(self.tree) == 'tree2tree.Tree', "expecting an input tree")
   end
-  --assert(#gradOutput == #input, "gradOutput should have as many elements as input")
-  --assert(#gradOutput == self.tree:size(), "gradOutput should have as many elements as input")
-  --self.gradInput = tree2tree:Tree():copy(inputTree,"skeleton")
   local node_traversal = self:getTraversal('backward') -- wil depend on type of tree, should already remove padding and root, etc.
   for i, node_step in ipairs(node_traversal) do
     local node, prev_frat_node, next_frat_node, side = unpack(node_step)
@@ -195,7 +146,6 @@ function Treequencer:accUpdateGradParameters(input, gradOutput, lr)
   assert(torch.type(self.tree) == 'tree2tree.Tree', "expecting an input tree")
   assert(#gradOutput == #input, "gradOutput should have as many elements as input")
   assert(#gradOutput == self.tree:size(), "gradOutput should have as many elements as input")
-  --self.gradInput = tree2tree:Tree():copy(inputTree,"skeleton")
   local node_traversal = self:getTraversal('backward') -- wil depend on type of tree, should already remove padding and root, etc.
   for i, node_step in ipairs(node_traversal) do
     local node, prev_frat_node, next_frat_node, side = unpack(node_step)
@@ -256,9 +206,8 @@ end
 function Treequencer:maxBPTTstep(rho)
 end
 
-
 function Treequencer:getTraversal(direction)
-  -- should porbably only do this once at the beginning and save
+  -- should only do this once at the beginning and save
   --local direction = direction or 'forward'
   assert(self.tree  ~= nil, "Error: no learning tree")
   assert(direction == 'forward' or direction == 'backward', "Wrong direction")
@@ -286,7 +235,5 @@ function Treequencer:getTraversal(direction)
   end
   return nodes, k
 end
-
-
 
 Treequencer.__tostring__ = nn.Decorator.__tostring__

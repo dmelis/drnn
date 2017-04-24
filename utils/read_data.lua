@@ -7,8 +7,6 @@
     - Padding
     - Writing predictions
 
- -- TODO: Move to string keys instead of numbers?
-
     IMPORTANT: IF these indices are changed, must make sure that prepare_inputs
     agrees with this. We need to eliminate the one corresponding to EOS before
     forwarding to newtork.
@@ -20,45 +18,6 @@ function tree2tree.read_embedding(vocab_path, emb_path)
   local vocab = tree2tree.Vocab(vocab_path)
   local embedding = torch.load(emb_path)
   return vocab, embedding
-end
-
--- Initializes embeddings for composed words: e.g. President_Obama will be Initialized
--- to the sum of the embeddings for president and for Obama
-function tree2tree.initialize_composed_embeddings(word_vocab,word_vecs,vocab_data)
-  ent_vocab = {}
-  ent_vecs  = {}
-  local composed_tokens_vocab = {}
-  local composed_tokens_vecs  = {}
-  for i,tok in pairs(vocab_data._tokens) do
-    parts = tok:split('_')
-    local total_types = 0
-    if #parts > 1 then
-      for j,w in pairs(parts) do
-        if word_vocab:contains(w) then
-          debugutils.dprint(2,'Word found in word embeddings: '.. w)
-          ind = word_vocab:index(w)
-          if total_types == 0 then
-            cumul_vec = word_vecs:select(1,ind):clone()
-          else
-            cumul_vec:add(word_vecs[ind])
-          end
-          total_types = total_types + 1
-        else
-          debugutils.dprint(2,'Word not found in word embeddings: '.. w)
-        end
-      end
-      if total_types > 0 then
-        cumul_vec:div(total_types)
-        composed_tokens_vocab[#composed_tokens_vocab+1]=tok
-        composed_tokens_vecs[#composed_tokens_vecs+1] = cumul_vec
-      else
-        -- Dont do anything, this token will de added to unk's later
-        debugutils.dprint(2, 'No type vectors found for token' .. tok)
-      end
-    end -- End if parts
-  end -- End for over tokens
-  debugutils.dprintf(1,'Initialized %i composed token embeddings\n',#composed_tokens_vecs)
-  return composed_tokens_vocab, composed_tokens_vecs
 end
 
 function tree2tree.prune_unused_vectors(emb_vecs,emb_vocab,vocab_keep)
@@ -86,57 +45,6 @@ function tree2tree.prune_unused_vectors(emb_vecs,emb_vocab,vocab_keep)
   return vocab_keep,vecs,num_embedding_complement
 end
 
--------------------------------------
--- Expand word embedding dictionary with additional elements. Does merging in
--- place (i.e. appended).
--- @base the primary word embeddings: {vocab, vectors}
--- @extr additional embeddings: {vocab, vectors}
--------------------------------------
-function tree2tree.expand_embeddings(base, extra)
-  local extra_vocab, extra_vecs = extra[1], extra[2]
-  local base_vocab, base_vecs = base[1], base[2]
-  local vecs_append = {}
-
-  local extra_words
-  if torch.type(extra_vocab) == 'table' then
-    extra_words = extra_vocab
-  else
-    extra_words = {}
-    -- TODO: This is probably not necessary, I'm doing it for extra precaution,
-    -- because I'm not sure about the indexing in Vocab.
-    -- The simpler way would be to set extra_words = extra_vocab._tokens
-    for i=1,extra_vocab.size do
-      table.insert(extra_words,extra_vocab:token(i))
-    end
-  end
-
-  debugutils.dprint(1, 'Adding a total of ' .. #extra_words .. ' items to embeddings')
-  for i,w in ipairs(extra_words) do
-    if base_vocab:contains(w) then
-      -- Unlikely, but might happen. In this case, give priority to new vec, overwrite old
-      local vec
-      if torch.type(extra_vecs) == 'table' then
-        vec = extra_vecs[i]
-      else
-        vec = extra_vecs:select(1,i)
-      end
-      base_vecs:select(1,base_vocab:index(w)):copy(vec)
-    else
-      base_vocab:add(w)
-      if torch.type(extra_vecs) == 'table' then
-        vec = extra_vecs[i]:view(1,-1)
-      else
-        vec = extra_vecs:select(1,i):view(1,-1)
-      end
-      vecs_append[#vecs_append+1] = vec:clone()
-    end
-  end
-  local vecs_append_T = nn.JoinTable(1):forward(vecs_append):float() -- TODO: Why does Join Table return Double?
-  --local base_vecs_copy = base_vecs:clone()
-  local expanded_vecs = base_vecs:cat(vecs_append_T,1)
-  --assert(base_vocab.size == base_vecs:size(1), "Something went wrong in merging embeddings" .. tostring(base_vocab.size) .. "~=" .. tostring(base_vecs:size(1)))
-  return base_vocab, expanded_vecs
-end
 
 function tree2tree.read_default_embedding(slang,tlang,vocab_keep_src,vocab_keep_tgt,disjoint,initialize_composed)
   -- second, third argument is optional
@@ -576,8 +484,6 @@ end
   MS COCO dataset.
    Assumes captions have already been parsed, and
 ]] --
-
-
 function tree2tree.read_coco_dataset(dir, vocab, fine_grained, dependency)
   local dataset = {}
   dataset.vocab = vocab
@@ -615,91 +521,6 @@ function tree2tree.read_coco_dataset(dir, vocab, fine_grained, dependency)
   end
   return dataset
 end
-
-
-
---[[
-
- Sentiment
-
---]]
-
-function tree2tree.read_sentiment_dataset(dir, vocab, fine_grained, dependency)
-  local dataset = {}
-  dataset.vocab = vocab
-  dataset.fine_grained = fine_grained
-  local trees
-  if dependency then
-    trees = tree2tree.read_trees(dir .. 'dparents.txt', dir .. 'dlabels.txt')
-  else
-    trees = tree2tree.read_trees(dir .. 'parents.txt', dir .. 'labels.txt')
-    for _, tree in ipairs(trees) do
-      set_spans(tree)
-    end
-  end
-
-  local sents = tree2tree.read_sentences(dir .. 'sents.txt', vocab)
-  if not fine_grained then
-    dataset.trees = {}
-    dataset.sents = {}
-    for i = 1, #trees do
-      if trees[i].gold_label ~= 0 then
-        table.insert(dataset.trees, trees[i])
-        table.insert(dataset.sents, sents[i])
-      end
-    end
-  else
-    dataset.trees = trees
-    dataset.sents = sents
-  end
-
-  dataset.size = #dataset.trees
-  dataset.labels = torch.Tensor(dataset.size)
-  for i = 1, dataset.size do
-    remap_labels(dataset.trees[i], fine_grained)
-    dataset.labels[i] = dataset.trees[i].gold_label
-  end
-  return dataset
-end
-
-function set_spans(tree)
-  if tree.num_children == 0 then
-    tree.lo, tree.hi = tree.leaf_idx, tree.leaf_idx
-    return
-  end
-
-  for i = 1, tree.num_children do
-    set_spans(tree.children[i])
-  end
-
-  tree.lo, tree.hi = tree.children[1].lo, tree.children[1].hi
-  for i = 2, tree.num_children do
-    tree.lo = math.min(tree.lo, tree.children[i].lo)
-    tree.hi = math.max(tree.hi, tree.children[i].hi)
-  end
-end
-
-function remap_labels(tree, fine_grained)
-  if tree.gold_label ~= nil then
-    if fine_grained then
-      tree.gold_label = tree.gold_label + 3
-    else
-      if tree.gold_label < 0 then
-        tree.gold_label = 1
-      elseif tree.gold_label == 0 then
-        tree.gold_label = 2
-      else
-        tree.gold_label = 3
-      end
-    end
-  end
-
-  for i = 1, tree.num_children do
-    remap_labels(tree.children[i], fine_grained)
-  end
-end
-
---function tree2tree.pad_lr_tree(tree,eos_idx,vocab, pad_sot, pad_eos,pad_leaves)
 
 function tree2tree.pad_tree(tree,eos_index,vocab, pad_sot, pad_eos, pad_leaves, multi_root)
   --[[
@@ -1125,27 +946,7 @@ function tree2tree.read_parallel_tree_dataset_tensor(dir, vocab_src, vocab_tgt, 
     target_dataset.trees = tree2tree.read_trees_tensor(target_dataset.sents,dir .. 't.parents',lr_tree,seq_len,args_treepad)
   end
 
-
-
-  --pad_trees(target_dataset.trees, target_dataset.sents, vocab_tgt,args_treepad)
-
   dataset.size = source_dataset.sents:size(1)
-  --dataset.trees, dataset.sents = {}, {}
-  -- for i = 1, dataset.size do
-  --   --dataset.trees[i] = {source = source_dataset.trees[i], target = target_dataset.trees[i]}
-  --   dataset.sents[i] = {source = source_dataset.sents[i], target = target_dataset.sents[i]}
-  -- end
-
-  -- dataset.source = {
-  --   sents  = source_dataset.sents,
-  --   trees = source_dataset.trees,
-  -- }
-  --
-  -- dataset.target = {
-  --   sents  = target_dataset.sents,
-  --   trees  = target_dataset.trees
-  -- }
-
   dataset.source = {
     source_dataset.trees,
     source_dataset.sents
@@ -1249,11 +1050,10 @@ end
 function tree2tree.get_save_paths(opt)
   save_paths = {}
   -- This are declared in init
-  local score_pred_dir = tree2tree.score_predictions_dir .. '/' .. opt.dataset .. '/'
   local pred_dir       = tree2tree.predictions_dir .. '/' .. opt.dataset .. '/'
   local model_dir      = tree2tree.models_dir .. '/' .. opt.dataset .. '/'
 
-  for i,pth in ipairs{score_pred_dir, pred_dir, model_dir} do
+  for i,pth in ipairs{pred_dir, model_dir} do
     if not paths.dirp(pth) then
       recursive_mkdir(pth)
     end
@@ -1279,9 +1079,6 @@ function tree2tree.get_save_paths(opt)
   -- Collect all paths
   save_paths['models'] = model_save_path
   save_paths['checkpoints'] = path.join(model_dir, string_id)
-  save_paths['score_preds'] = {}
-  save_paths['score_preds']['dev'] = path.join(score_pred_dir,'dev',string_id .. '.score_preds')
-  save_paths['score_preds']['test'] = path.join(score_pred_dir, 'test',string_id .. '.score_preds')
 
   -- Prediction summary files have summary features and stats about predicted tree
   save_paths['preds'] = {} -- {dev = nil, test = nil}
@@ -1293,8 +1090,7 @@ function tree2tree.get_save_paths(opt)
   save_paths['raw_preds']['dev'] = path.join(pred_dir,'dev',string_id .. '.raw_preds')
   save_paths['raw_preds']['test'] = path.join(pred_dir,'test',string_id .. '.raw_preds')
 
-  dirs_mk = {path.join(score_pred_dir,'dev'),path.join(score_pred_dir,'test'),
-             path.join(pred_dir,'dev'),path.join(pred_dir,'test')}
+  dirs_mk = {path.join(pred_dir,'dev'),path.join(pred_dir,'test')}
 
   for i,pth in ipairs(dirs_mk) do
     if not paths.dirp(pth) then

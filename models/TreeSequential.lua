@@ -13,11 +13,9 @@ function TreeSequential:updateOutput(input)
         end
       end
       -- Do this also for parallel modules, so that the next one can grab it without another exception
-      --print(i, self.modules[i])
       self.modules[i].tree = (i==1) and self.initialTree or
                         (self.modules[i-1].outputTree or self.modules[i-1].tree)
       self.modules[i].lr_tree = self.lr_tree
-      --print('Hello from TreeSeq', self.modules[i].tree)
       currentOutput = self:rethrowErrors(self.modules[i], i, 'updateOutput', currentOutput)
    end
    self.output = currentOutput
@@ -31,10 +29,3 @@ function TreeSequential:setInitialTree(tree)
   self.initialTree = initialTree
   self.lr_tree = lr_tree
 end
-
--- function TreeSequential:setTree(tree,level)
---   assert(level < #self.modules)
---   for i=1,level do
---      self.modules[i].tree = tree
---   end
--- end

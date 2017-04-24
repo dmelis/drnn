@@ -2,6 +2,8 @@
 
   A basic tree structure.
 
+  Partly based on [REPO]. --TODO: Add url
+
 --]]
 
 local Tree = torch.class('tree2tree.Tree')
@@ -18,16 +20,6 @@ function Tree:__init(args)
     end
   end
 end
-
--- function Tree:add_child(c,pos)
---   c.parent = self
---   c.left_brother = self.children[self.num_children]
---   if self.num_children > 0 then
---     self.children[self.num_children].right_brother = c
---   end
---   self.num_children = self.num_children + 1
---   self.children[self.num_children] = c
--- end
 
 function Tree:add_child(c, pos)
   pos = pos or 'idx' --default is lexical behavior
@@ -80,21 +72,6 @@ function Tree:remove_child(k)
   -- TODO: Must also remove it from self.children
   return removed.idx
 end
-
-
-
--- function Tree:remove_child(k)
---   assert(self.num_children >= k, 'Error: removing nonexistent child')
---   table.remove(self.children, k)
---   if k >1 then
---     self.children[k-1].right_brother =  self.children[k]
---     if k < self.num_children then
---       self.children[k].left_brother =  self.children[k-1]
---     end
---   end
---   self.num_children = self.num_children - 1
---   if self._size then self._size = self._size - 1 end
--- end
 
 function Tree:get_leftmost_brother()
   local brother
@@ -250,10 +227,8 @@ function Tree:print_lexical_order(node_labels, prune_padding)
   local nodes = self:lexical_order()
   local lstring = ""
   for i=1,#nodes do
-    -- if (not is_padded) or (nodes[i].idx > 2) and (nodes[i].idx < #node_labels) then
     local symbol = (node_labels) and node_labels[nodes[i].idx] or nodes[i].idx
     lstring = lstring .. symbol .. " "
-    --end
   end
   print(lstring)
 end
@@ -264,9 +239,7 @@ function Tree:totable_lexical_order(node_labels, tokens_to_ignore)
   local prune_padding = prune_padding or true
   local nodes = self:lexical_order()
   local t = {}
-  --print('To ignore: ',tokens_to_ignore)
   for i=1,#nodes do
-    -- if (not is_padded) or (nodes[i].idx > 2) and (nodes[i].idx < #node_labels) then
     local node = nodes[i]
     local symbol = (node_labels) and node_labels[node.idx] or node.idx
     if (tokens_to_ignore ~= nil) and equals_any(symbol,tokens_to_ignore) then
@@ -278,18 +251,13 @@ function Tree:totable_lexical_order(node_labels, tokens_to_ignore)
   return t
 end
 
-
 -- Converts tree to original parents/tokens format
 function Tree:convert_to_original(node_labels)
-  --local prune_padding = prune_padding or true
   local nodes = self:lexical_order()
   local p = {}
   local t = {}
   local idxs = {}
   for i=1,#nodes do
-    -- if (not is_padded) or (nodes[i].idx > 2) and (nodes[i].idx < #node_labels) then
-    -- if (tokens_to_ignore) and equals_any(node_labels[nodes[i].idx],tokens_to_ignore) then
-      --print('Skipping node' .. node_labels[nodes[i].idx])
     if (nodes[i].bdy == nil)  then
       idxs[nodes[i].index] = #t + 1
       p[#t+1]= nodes[i].parent and idxs[nodes[i].parent.index] or 0 -- Assign index zero to root's parent
@@ -309,7 +277,6 @@ function Tree:edges_table_lexical_order(node_labels, tokens_to_ignore)
   "Edges to table. Must provide node labels if providing tokens to ignote")
   local edges = {}
   for i=1,#nodes do
-    -- if (not is_padded) or (nodes[i].idx > 2) and (nodes[i].idx < #node_labels) then
     local node = nodes[i]
     for j=1,node.num_children do
       local src_valid, dest_valid = true, true
@@ -317,7 +284,6 @@ function Tree:edges_table_lexical_order(node_labels, tokens_to_ignore)
       local symbol_b = (node_labels) and node_labels[node.children[j].idx] or node.children[j].idx
       if (node.bdy) or ((tokens_to_ignore ~= nil) and (equals_any(symbol_p,tokens_to_ignore) or
       equals_any(symbol_b,tokens_to_ignore))) then
-        --print('Skipping edge',symbol_p, symbol_b)
       else
         edges[#edges+1] = symbol_p .. "->" -- .. symbol_b   -- TODO: Decide whether to match full (n,e,n) or just (n,e)
       end
@@ -344,8 +310,6 @@ function Tree:depth_first_preorder()
 end
 
 function Tree:prune_leftmost_leaves()
-  -- Decided not to do the sift idx thing.
-  --local shiftidx = shiftidx or true -- shift the idx of all nodes to compensate for <s> missing now.
   local nodes = {}
   self._size = nil  -- If not, memory about size from prevous sizing is kept, no good.
   depth_first_preorder(self, nodes)
@@ -362,9 +326,6 @@ function Tree:prune_padding_leaves(type,labels)
   local type = type or 'both' -- options: {SOS,EOS,both}
   local labels = labels or nil
   self._size = nil  -- If not, memory about size from prevous sizing is kept, no good.
-  -- if self.idx == 1 then --there's root padding, remove
-  --   lexical_order(self.lchildren[1], all_nodes)
-  -- else
   local unpadded_tree = (self.bdy == 'SOT') and self:copy(self.children[1],"full") or self:copy(self,"full")-- get rid of top
   local nodes = unpadded_tree:depth_first_preorder()
   for i = 1, #nodes do
@@ -401,7 +362,6 @@ function Tree:print_preorder(node_labels,vocab)
     else
       parent_word = (node_labels) and node_labels[node.parent.idx] or '--'
     end
-    --print(node_labels[node.idx])
     local this_word = (node_labels) and node_labels[node.idx] or '--'
     local left_word = (node_labels and node.left_brother) and node_labels[node.left_brother.idx] or '--'
     local right_word = (node_labels and node.right_brother) and node_labels[node.right_brother.idx] or '--'
@@ -508,47 +468,3 @@ function Tree:get_node_byidx(idx)
   end
   return interest_node
 end
-
-
--- The following two come from lang2logic's Tree function. Convert tree to
--- lambda-calculus expression
--- function Tree:to_lambda_string()
---   local r_list = {}
---   for i = 1, self.num_children do
---     if class.istype(self.children[i], 'tree2tree.Tree') then
---       table.insert(r_list, '( '..self.children[i]:to_lambda_string()..' )')
---     else
---       table.insert(r_list, tostring(self.children[i]))
---     end
---   end
---   return (' '):join(r_list)
--- end
-
---
--- function Tree:to_lambda_string()
---   local r_list = {}
---   table.insert(r_list, self.idx)
---   for i = 1, self.num_children do
---     if class.istype(self.children[i], 'tree2tree.Tree') then
---       table.insert(r_list, '( '..self.children[i]:to_lambda_string()..' )')
---     else
---       table.insert(r_list, tostring(self.children[i]))
---     end
---   end
---   return (' '):join(r_list)
--- end
---
--- function Tree:to_lambda_list(form_manager)
---   local r_list = {}
---   for i = 1, self.num_children do
---     if class.istype(self.children[i], 'tree2tree.Tree') then
---       table.insert(r_list, form_manager:get_symbol_idx('('))
---       local cl = self.children[i]:to_lambda_list(form_manager)
---       for k = 1, #cl do table.insert(r_list, cl[k]) end
---       table.insert(r_list, form_manager:get_symbol_idx(')'))
---     else
---       table.insert(r_list, self.children[i])
---     end
---   end
---   return r_list
--- end

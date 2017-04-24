@@ -28,33 +28,21 @@ tree2tree = {}
 
 
 -- Utils. TODO: put a init.lua file in utils and require that instead
-
 require 'utils.read_data'
 require 'utils.Vocab'
 require 'utils.Tree'
 require 'utils.test_utils'
--- require 'utils.LRTree'
 require 'utils.handy_functions'
--- require 'utils.evaluation'
--- require 'utils.tree_conversion'
+require 'utils.evaluation'
+require 'utils.tree_conversion'
 debugutils = require 'utils.debugutils'
---net_utils  = require 'utils.net_utils'
-
 
 -- Third Party
 require 'utils.CRowAddTable'
-
-
-
-
--- Models
---include('models/LSTM_dec.lua')
---include('models/encoder.lua')
---include('models/decoder.lua')
-
-factory    = require 'models.module_factory'
 -- require 'models.thirdparty.TreeLSTM'
 -- require 'models.thirdparty.ChildSumTreeLSTM'
+
+factory    = require 'models.module_factory'
 require 'models.module_factory'
 require 'models.AbstractTree'
 require 'models.TreeSequential'
@@ -64,7 +52,6 @@ require 'models.DRNN'
 require 'models.TreePredictionLayer'
 require 'models.Treequencer'
 
-
 -- Criteria
 require 'criteria.TreeCriterion'
 require 'samplers.Samplers'
@@ -73,8 +60,7 @@ require 'samplers.Samplers'
 -- Globals (modify if desired)
 tree2tree.data_dir        = 'data'    -- TODO: Move all data locally
 tree2tree.models_dir      = 'trained_models'
-tree2tree.score_predictions_dir = 'score_predictions'
 tree2tree.predictions_dir = 'predictions'
 
-tree2tree.goToken = '<'
+tree2tree.goToken  = '<'
 tree2tree.eosToken = '>'

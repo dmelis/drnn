@@ -2,7 +2,7 @@
 
 if [ "$1" == "synth" ]; then
 th main.lua -dataset synth -seq_len 20 -encoder LSTM -decoder tree,GRU,DTP \
-            -batch 20 -epochs 2 -prediction_folds 'dev,test' -clip 5 -reg 0.0001 \
+            -batch 20 -epochs 5 -prediction_folds 'dev,test' -clip 5 -reg 0.0001 \
             -learning_rate 0.05 -memdim 50 -prediction -prediction_folds 'dev,test' \
             -dev_loss_every 1 -dev_pred_every 1 -select_criterion 'prediction' \
             -cropv 20000 -noprompt -debug 0 -embedding rand -maxexamples 50 -shuffle

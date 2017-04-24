@@ -1,3 +1,5 @@
+-- Based on elementresearch rnn's AbstractSequence module
+
 local _ = require 'moses'
 
 local AbstractTree, parent = torch.class('tree2tree.AbstractTree', 'nn.Container')
@@ -54,35 +56,11 @@ function AbstractTree:accGradParameters(input, gradOutput, scale)
    self.accGradParametersStep = self.accGradParametersStep - 1
 end
 
--- function AbstractTree:updateGradInput(input, gradOutput)
---   print('Hello from abstracttree updateGRad')
---    -- updateGradInput should be called in reverse order of time
---    self.updateGradInputStep = self.updateGradInputStep or self.step
---    -- BPTT for one time-step
---    --print(#input)
---    print(torch.type(input))
---    bk()
---    self.gradInput = self:_updateGradInput(input, gradOutput)
---    self.updateGradInputStep = self.updateGradInputStep - 1
---    self.gradInputs[self.updateGradInputStep] = self.gradInput
---    print(torch.type(self.gradInput), #self.gradInput, self.gradInput:norm(1))
---    return self.gradInput
--- end
-
--- function AbstractTree:accGradParameters(input, gradOutput, scale)
---    -- accGradParameters should be called in reverse order of time
---    assert(self.updateGradInputStep < self.step, "Missing updateGradInput")
---    self.accGradParametersStep = self.accGradParametersStep or self.step
---    -- BPTT for one time-step
---    self:_accGradParameters(input, gradOutput, scale)
---    self.accGradParametersStep = self.accGradParametersStep - 1
--- end
-
 -- goes hand in hand with the next method : forget()
 -- this methods brings the oldest memory to the current step
 function AbstractTree:recycle(offset)
    -- offset can be used to skip initialModule (if any)
-   local _ = require 'moses' 
+   local _ = require 'moses'
    offset = offset or 0
    self.nSharedClone = self.nSharedClone or _.size(self.sharedClones)
    local rho = math.max(self.rho + 1, self.nSharedClone)
@@ -187,8 +165,6 @@ function AbstractTree:evaluate()
       return parent.evaluate(self)
    end)
 end
-
-
 -- used by Recursor() after calling stepClone.
 -- this solves a very annoying bug...
 function AbstractTree:setOutputStep(step)
@@ -196,13 +172,3 @@ function AbstractTree:setOutputStep(step)
    assert(self.output, "no output for step "..step)
    self.gradInput = self.gradInputs[step]
 end
-
--- function ChildSumTreeLSTM:clean(tree)
---   self:free_module(tree, 'composer')
---   self:free_module(tree, 'output_module')
---   tree.state = nil
---   tree.output = nil
---   for i = 1, tree.num_children do
---     self:clean(tree.children[i])
---   end
--- end

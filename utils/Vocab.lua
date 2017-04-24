@@ -5,6 +5,8 @@ Maps between vocabulary tokens and indices. If an UNK token is defined in the
 vocabulary, returns the index to this token if queried for an out-of-vocabulary
 token.
 
+Heavily based on [REPO]. --TODO: Add url
+
 --]]
 
 local Vocab = torch.class('tree2tree.Vocab')
@@ -104,14 +106,6 @@ function Vocab:map(tokens)
   return output
 end
 
--- function Vocab:reverse_map(indices)
---   local len = #indices
---   local output = {}
---   for i = 1, len do
---     output[i] = self:token(indices[i])
---   end
---   return output
--- end
 function Vocab:reverse_map(indices,kill_nil)
   local kill_nil = kill_nil or false
   --local len = #indices

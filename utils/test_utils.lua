@@ -5,12 +5,9 @@ function display_tree_example(tree,sent,vocab,padded,prune)
   local sent = (torch.type(sent) == 'table') and sent or torch.totable(sent)
   if padded then
     if torch.type(tree) == 'tree2tree.LRTree' then
-      --recons_tree = tree2tree.LRTree():copy(tree)
       recons_tree = tree2tree.LRTree():copy(tree, "full", true)
     else
       recons_tree = tree2tree.Tree():copy(tree, "full", true)
-      --recons_tree = tree:prune_padding_leaves()
-      -- TODO: Copy the style of TreeLR copy to accept removepad arg
     end
     display_tree = (prune) and recons_tree or tree
   else
@@ -98,17 +95,9 @@ function generate_random_dataset(vocab_size, batch_size, max_len)
     end
     return tree
   end
-  -- local len = #
-  -- local sent = torch.IntTensor(len)
-  -- for i = 1, len do
-  --   local token = tokens[i]
-  --   sent[i] = vocab:index(token)
-  -- end
 
   local assign_labels = function(tree)
     local nodes = tree:depth_first_preorder()
-    --sent[1] = 1
-    --sent[2] = 2
     local sent = {}
     local max_idx = 2
     for _,node in pairs(nodes) do
@@ -134,7 +123,6 @@ function generate_random_dataset(vocab_size, batch_size, max_len)
   end
 
   local create_pair = function()
-    --local sents = torch.Tensor(batch_size,max_len):zero() -- zero padding
     local sents = {}
     local trees = {}
     for k=1,batch_size do
@@ -145,9 +133,6 @@ function generate_random_dataset(vocab_size, batch_size, max_len)
         tree:set_preorder_index()
         sent = assign_labels(tree)
       end
-      --print(k, #sent)
-      --local z = sents:sub(k,k,1,#sent)
-      --z = torch.Tensor(sent)
       sents[k] = sent
       trees[k] = tree
     end
@@ -188,8 +173,6 @@ function hsep()
   print(string.rep('-', 80))
 end
 
-
-
 -- Can only be run after a pass of forward on the module
 function flesh_out_sequential(seqmodule)
   print('')
@@ -207,8 +190,6 @@ function flesh_out_sequential(seqmodule)
     else
       size_out = (out:nDimension() >0) and out:size(1) or nil
       size_elem = out and out:size(1) or nil
-      --print(out:size())
-      --if size_elem == 1 then size_elem = out end
       size_out = tostring(size_out)
       size_elem = tostring(size_elem)
       keys = ""
@@ -218,20 +199,6 @@ function flesh_out_sequential(seqmodule)
   hsep()
   print('')
 end
-
-
-
--- function treeify_table(tree, table)
---   local out = {}
---   local nodes = tree:depth_first_preorder()
---   for _,node in pairs(nodes) do
---     if (node.idx > 2) then
---       out[node.idx-2] = table[node.index]
---     end
---   end
---   return out
--- end
-
 
 function flatten_tree_table(tree, table)
   local out = {}

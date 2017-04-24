@@ -1,3 +1,4 @@
+-- Based on elementresearch rnn's AbstractSequencer module
 local AbstractTreequencer, parent = torch.class("nn.AbstractTreequencer", "nn.Container")
 
 function AbstractTreequencer:getStepModule(step)

@@ -83,7 +83,6 @@ cmd:option('-checkpoint_every', 1, 'Save model every k epochs')
 
 -- Debugging
 cmd:option('-debug',0,'debugging level (0 for no debugging)')
-cmd:option('-debugdata',false,'use debug dataset')
 cmd:option('-test_generation', false, 'Generate example every epoch')
 cmd:option('-noprompt',false, 'do not prompt for continue')
 cmd:option('-seed',-1, 'do not prompt for continue')
@@ -217,13 +216,6 @@ print('loading datasets...')
 local train_dir = data_dir .. 'train/'
 local dev_dir   = data_dir .. 'dev/'
 local test_dir  = data_dir .. 'test/'
-local debug_dir = data_dir .. 'debug/'
-if opt.debugdata then
-  print('Will use debug dataset')
-  train_dir = debug_dir
-  dev_dir   = debug_dir
-  test_dir  = debug_dir
-end
 
 local read_args = {
   seq_len = opt.seq_len, maxexamples = opt.maxexamples, shuffle = opt.shuffle,
@@ -251,8 +243,6 @@ printf('\tnum dev   = %d\n', dev_dataset.size)
 
 
 --If test sentence generation
---local example_tree = train_dataset.source[example_k].tree
---local example_sent = train_dataset.source[example_k].sent
 local source_example  = {}
 if opt.test_generation then
   local example_k = 4
@@ -260,39 +250,13 @@ if opt.test_generation then
   if opt.tensor_mode then
     example_tree, example_sent = dev_dataset.source[1][1]:select(1,8), dev_dataset.source[2]:select(1,8)
   else
-    --print(dev_dataset.sents[8].source)
-    --print(dev_dataset.trees[8].source)
     example_tree, example_sent = dev_dataset.source[8].tree, dev_dataset.source[8].sent
   end
   source_example = {tree = example_tree, sent = example_sent}
 end
 
---print(vocab_tgt:reverse_map({1406, 2181}))
--- local exno = 2
--- if use_source_trees then
---   display_tree_example(train_dataset.source[exno].tree, train_dataset.source[exno].sent, vocab_src,false, false)
--- end
--- if use_target_trees then
---   display_tree_example(train_dataset.target[exno].tree, train_dataset.target[exno].sent, vocab_tgt,true, false)
--- end
-
-
-
+print('Here is an example from the train set:')
 display_tree_example(train_dataset.target[1].tree, train_dataset.target[1].sent, vocab_tgt,true, false)
-
--- print(train_dataset[exno].tree.target:to_lambda_string())
---
-
--- local nodes = train_dataset[exno].tree.target:breadth_first()
--- for i,k in pairs(nodes) do printf(' (%i,%i) ', k.index,k.idx) end
--- printf('\n')
---
--- local nodes = train_dataset[exno].tree.target:getTraversal('forward')
---
--- for i,k in pairs(nodes) do printf(' (%i,%i) ', k[1].index,k[1].idx) end
--- printf('\n')
---
--- bk()
 
 -- initialize model
 local config = {
@@ -310,8 +274,7 @@ local config = {
   source_vocab = vocab_src,
   grad_clip    = opt.clip,
   pad_eos      = pad_eos,
-  seq_len      = opt.seq_len,
-  debug        = opt.debug,
+  seq_len      = opt.seq_len
 }
 
 -- Convenient general caller for model
@@ -363,14 +326,6 @@ end
 if not opt.noprompt then
   prompt_continue()
 end
-
-
--- model:predicting()
--- torch.manualSeed(10)
--- enc_in, dec_in, dec_gold = model:prepare_inputs(train_dataset.trees[15],train_dataset.sents[15])
--- model:test_sampling(enc_in, dec_gold)
--- model:training()
--- bk()
 
 -- train
 local train_start = sys.clock()
@@ -435,7 +390,6 @@ for i = 1, num_epochs do
     local checkpoint_path = save_paths['checkpoints'] .. '_ckp' .. tostring(i) .. '.t7'
     print('writing model to ' .. checkpoint_path)
     model:save(checkpoint_path)
-    --torch.save(checkpoint_path .. '.dump', model)
   end
 
   if opt.select_criterion == 'loss' and (dev_loss < best_dev_loss) then
@@ -443,19 +397,12 @@ for i = 1, num_epochs do
     best_dev_score = dev_loss
     best_dev_loss  = dev_loss
   elseif opt.select_criterion == 'prediction' and  (dev_pred_acc > best_dev_acc) then
-    -- if (dataset == 'IFTTT' and (dev_pred_acc['func'] > best_dev_acc['func'])) or -- Change to F1?
-    --    (dataset ~= 'IFTTT' and (dev_pred_acc > best_dev_acc)) then
     update_best_model = true
     best_dev_acc   = dev_pred_acc
     best_dev_score = dev_pred_acc
   else
     update_best_model = false
   end
-
-  -- if opt.early_stopping then
-  --   prev_dev_score = (opt.select_criterion == 'prediction') and dev_pred_acc or dev_loss
-  --   early_stop =
-  -- end
 
   if update_best_model then
     print('Updating best dev model!')
@@ -521,48 +468,6 @@ if not opt.nosave then
   test_extracted, test_example_stats,test_bool_correct, vocab_tgt)
 end
 
-
-
--- if opt.dataset == 'IFTTT' then
---   tree2tree.write_IFTTT_predictions(save_paths['preds']['test'],test_extracted, test_correct)
--- else
---   tree2tree.write_predictions(save_paths['preds']['test'],test_pred_linearized, test_gold_linearized)
--- end
-
--- -- write predictions to disk
--- local predictions_file = torch.DiskFile(predictions_save_path, 'w')
--- print('writing predictions to ' .. predictions_save_path)
--- for i = 1, test_predictions:size(1) do
---   predictions_file:writeFloat(test_predictions[i])
--- end
--- predictions_file:close()
-
--- local test_pred_size = opt.paradigm == 'scoring' and test_score_predictions:size(1) or test_score_predictions[1]:size(1)
--- local score_predictions_file = torch.DiskFile(save_paths['score_preds']['test'], 'w')
--- for i = 1, test_pred_size do
---   if opt.paradigm == 'scoring' then
---     score_predictions_file:writeFloat(test_score_predictions[i])
---   elseif opt.paradigm == 'ranking' then
---     -- THere are two scores in this case: for positive and negative. We dump the
---     -- coding of ranking: +1 means first one is better rankged, -1 the opposite.
---     local outval = test_score_predictions[1][i] > test_score_predictions[2][i] and 1 or -1
---     score_predictions_file:writeInt(outval)
---   end
--- end
--- score_predictions_file:close()
-
--- write dev preds
--- if opt.prediction and equals_any('dev',opt.prediction_folds) and best_dev_model_preds then
---   print('writing relation predictions on dev set to ' .. save_paths['preds']['dev'])
---
---   if opt.dataset == 'IFTTT' then
---     tree2tree.write_IFTTT_predictions(save_paths['preds']['dev'],dev_extracted, dev_correct)
---   else
---     tree2tree.write_predictions(save_paths['preds']['dev'],dev_predictions)
---   end
--- end
-
-
 if opt.append_results then
   local global_results_file
   if opt.logfile == 'NA' then
@@ -589,26 +494,3 @@ if opt.append_results then
   global_results_dfile:write(row)
   global_results_dfile:close()
 end
-
-
--- to load a saved model
--- local loaded = model_class.load(model_save_path)
-
-
---[[
-
-      TRASH
-
-]]--
-
-
--- Horrible patch. FIXME
--- local dev_prediction_dataset = {source = {}, target = {}}
--- if opt.prediction then
---   local num_pred_examples = opt.maxpred and opt.maxpred or #dev_dataset.sents
---   for i=1,num_pred_examples do -- CHANGE to dev!
---     local enc_input, dec_input, dec_gold = model:prepare_inputs(dev_dataset.trees[i], dev_dataset.sents[i])
---     dev_prediction_dataset['source'][i] = enc_input
---     dev_prediction_dataset['target'][i] = dec_gold
---   end
--- end

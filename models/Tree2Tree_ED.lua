@@ -66,25 +66,6 @@ function Tree2Tree_ED:__init(config)
     if string.match(v,'tp') then self.decoder_model = v end
   end
 
-
-  --
-  -- -- Parse our composite args.
-  -- -- Encoder.
-  -- for i,v in ipairs(string.split(string.lower(config.encoder_type),",")) do
-  --   if string.lower(v) == 'tree' then self.encoder_topology    = 'tree' end
-  --   if string.lower(v) == 'lstm' then self.encoder_recurrence  = 'lstm' end
-  --   if string.lower(v) == 'bilstm'then self.encoder_recurrence = 'bilstm' end
-  --   if string.lower(v) == 'bigru' then self.encoder_recurrence = 'bigru' end
-  --   if string.find(v,'cs') then  self.encoder_model = 'ChildSum' end
-  -- end
-  --
-  -- -- Decoder
-  -- for i,v in ipairs(string.split(string.lower(config.decoder_type),",")) do
-  --   if string.lower(v) == 'tree' then self.decoder_topology   = 'tree' end
-  --   if string.lower(v) == 'lstm' then self.decoder_recurrence = 'lstm' end
-  --   if string.match(v,'tp') then self.decoder_model = v end
-  -- end
-
   -- Set defaults
   self.encoder_topology      = self.encoder_topology or 'seq'
   self.encoder_recurrence    = self.encoder_recurrence or 'gru'
@@ -119,8 +100,6 @@ function Tree2Tree_ED:__init(config)
   -- optimizer configuration
   self.optim_state = { learningRate = self.learning_rate }
 
-  -- KL divergence optimization objective
-  --self.criterion = nn.DistKLDivCriterion()
   -- Instantiate Encoder
   local encoder_name
   if self.encoder_topology == 'seq' then
@@ -140,26 +119,6 @@ function Tree2Tree_ED:__init(config)
       os.exit()
     end
   end
-  --
-  -- -- Instantiate Encoder
-  -- local encoder_name
-  -- if self.encoder_topology == 'seq' then
-  --   local er = self.encoder_recurrence
-  --   self.encoder_core = (er == 'lstm')   and nn.LSTM(self.source_emb_dim, self.mem_dim)
-  --                   or  (er == 'gru')    and nn.GRU(self.source_emb_dim, self.mem_dim)
-  --                 --or  (et == 'bilstm') and nn.B
-  --                 --or  (et == 'bigru')  and
-  --   self.encoder = self:new_encoder_sequence_module(config.emb_vecs.source)
-  --   encoder_name = 'seq' .. '-' .. er
-  -- else -- tree encoder
-  --   if self.encoder_model == 'ChildSum' then
-  --     encoder_name = 'CS-TREE-LSTM'
-  --     self.encoder = tree2tree.tree_encoder(encoder_config,config.emb_vecs.source)
-  --   else
-  --     print("unrecognized encoder model")
-  --     os.exit()
-  --   end
-  -- end
 
   -- Instantiate Decoder
   local decoder_name
@@ -171,30 +130,12 @@ function Tree2Tree_ED:__init(config)
     self.decoder = self:new_decoder_sequence_module(core,config.emb_vecs and config.emb_vecs.target)
     decoder_name = 'seq' .. '-' .. dt
   else
-    --self.decoder_core = tree2tree.RecRec2Cell(self.target_emb_dim, self.mem_dim)
     local core = tree2tree.DRNN(decoder_config)
     self.criterion_type = 'tree'
     self.decoder = self:new_decoder_tree_module(core,config.emb_vecs and config.emb_vecs.target)
     self.decoder.lr_tree = self.lr_tree
     decoder_name = 'tree' .. '-' .. self.decoder_recurrence .. '-' .. self.decoder_model
   end
-
-  -- -- Instantiate Decoder
-  -- local decoder_name
-  -- if self.decoder_topology == 'seq' then
-  --   local dt = self.encoder_recurrence
-  --   self.decoder_core = (dt == 'lstm')   and nn.LSTM(self.target_emb_dim, self.mem_dim)
-  --                   or  (dt == 'gru')    and nn.GRU(self.target_emb_dim, self.mem_dim)
-  --   self.criterion_type = 'seq'
-  --   self.decoder = self:new_decoder_sequence_module(config.emb_vecs.target)
-  --   decoder_name = 'seq' .. '-' .. dt
-  -- else
-  --   --self.decoder_core = tree2tree.RecRec2Cell(self.target_emb_dim, self.mem_dim)
-  --   self.decoder_core = tree2tree.DRNN(decoder_config)
-  --   self.criterion_type = 'tree'
-  --   self.decoder = self:new_decoder_tree_module(config.emb_vecs.target)
-  --   decoder_name = 'tree' .. '-' .. self.decoder_recurrence .. '-' .. self.decoder_model
-  -- end
 
   -- Instantiate Criterion
   self.criterion = (self.decoder_topology == 'seq') and
@@ -231,18 +172,6 @@ function Tree2Tree_ED:new_encoder_sequence_module(core,vecs)
   return sequence_module
 end
 
--- function Tree2Tree_ED:new_decoder_sequence_module(vecs)
---   local sequence_module = nn.Sequential()
---   local target_emb = nn.LookupTable(self.target_vocab_dim, self.target_emb_dim)
---   target_emb.weight:copy(vecs)
---   sequence_module:add(target_emb)
---   sequence_module:add(nn.SplitTable(1, 2))
---   sequence_module:add(nn.Sequencer(self.decoder_core))
---   sequence_module:add(nn.Sequencer(nn.Linear(self.mem_dim, self.target_vocab_dim)))
---   sequence_module:add(nn.Sequencer(nn.LogSoftMax()))
---   return sequence_module
--- end
-
 function Tree2Tree_ED:new_decoder_sequence_module(core,vecs)
   local sequence_module = nn.Sequential()
   self.tgt_emb_module = nn.LookupTable(self.target_vocab_dim, self.target_emb_dim)
@@ -258,31 +187,6 @@ function Tree2Tree_ED:new_decoder_sequence_module(core,vecs)
   sequence_module:add(nn.Sequencer(self.decoder.prediction_module))
   return sequence_module
 end
-
--- -- Ideal tree decoder module:
---   local tree_module = nn.Sequential()
---   local target_emb = nn.LookupTable(self.target_vocab_dim, self.target_emb_dim)
---   target_emb.weight:copy(vecs)
---   tree_module:add(target_emb)
---   tree_module:add(nn.SplitTable(1, 2))
---   tree_module:add(nn.Treequencer(self.decoder_core))
---   tree_module:add(nn.Treequencer(nn.Linear(self.mem_dim, self.target_vocab_dim)))
---   tree_module:add(nn.Treequencer(nn.LogSoftMax()))
---   return tree_module
--- end
-
--- function Tree2Tree_ED:new_decoder_tree_module(vecs)
---   local tree_module = tree2tree.TreeSequential()
---   local target_emb = nn.LookupTable(self.target_vocab_dim, self.target_emb_dim)
---   target_emb.weight:copy(vecs)
---   tree_module:add(target_emb)
---   tree_module:add(nn.SplitTable(1, 2)) -- table to tensor, works for both online and mini-batch mode
---   self.decoder_core = tree2tree.RecRec2Cell_Fert(self.target_emb_dim, self.mem_dim)
---   tree_module:add(self.decoder_core)
---   tree_module:add(tree2tree.Treequencer(nn.Linear(self.mem_dim, self.target_vocab_dim)))
---   tree_module:add(tree2tree.Treequencer(nn.LogSoftMax()))
---   return tree_module
--- end
 
 function Tree2Tree_ED:new_decoder_tree_module(core,vecs)
   local tree_module = tree2tree.TreeSequential()
@@ -302,47 +206,6 @@ function Tree2Tree_ED:new_decoder_tree_module(core,vecs)
   end -- Pass topo info true
   return tree_module
 end
-
--- -- Model with independent fraternal/ancestral stop prediction
--- function Tree2Tree_ED:new_decoder_tree_module_2stop(vecs)
---   local tree_module = tree2tree.TreeSequential()
---   local target_emb = nn.LookupTable(self.target_vocab_dim, self.target_emb_dim)
---   target_emb.weight:copy(vecs)
---   tree_module:add(target_emb)
---   tree_module:add(nn.SplitTableDebug(1, 2)) -- table to tensor, works for both online and mini-batch mode
---   tree_module:add(self.decoder_core)
---
---   p = nn.ParallelTable()
---     :add(nn.Linear(self.mem_dim, 1))
---     :add(nn.Linear(self.mem_dim, 1))
---     :add(nn.Linear(self.mem_dim, self.target_vocab_dim))
---
---   nn.CAddTable()
---
---   tree_module:add(tree2tree.Treequencer(nn.Linear(self.mem_dim, self.target_vocab_dim)))
---   tree_module:add(tree2tree.Treequencer(nn.LogSoftMax()))
---   return tree_module
--- end
---
-
-
-
-
-
---self.decoder_core.userPrevOutput = nn.rnn.recursiveCopy(self.decoder_core.userPrevOutput, self.encoder_core.outputs[inputSeqLen])
---                                  decoder_core.userPrevAncestral = nn.rnn.recursiveCopy(decoder_core.userPrevAncestral, encoder_core.outputs[opt.seqLen])
---
--- if self.encoder_topology == 'seq' and self.decoder_topology == 'seq' then
---    if self.encoder_type == 'LSTM' and self.decoder_type == 'LSTM' then
---      self.decoder_core.userPrevCell   = nn.rnn.recursiveCopy(self.decoder_core.userPrevCell, self.encoder_core.cells[inputSeqLen])
---    end
--- elseif self.encoder_topology == 'tree' and self.decoder_topology == 'seq' then
---   self.decoder_core.userPrevOutput = nn.rnn.recursiveCopy(self.decoder_core.userPrevOutput, self.encoder.processer.output[1])
---   self.decoder_core.userPrevCell   = nn.rnn.recursiveCopy(self.decoder_core.userPrevCell, self.encoder.processer.output[2])
--- elseif self.encoder_topology == 'seq' and self.decoder_topology == 'tree' then
---   self.decoder.priming_state = nn.rnn.recursiveCopy(self.decoder.priming_state, self.encoder_core.outputs[inputSeqLen])
--- end
-
 
 --[[ Forward coupling: Copy encoder cell and output to decoder ]]--
 function Tree2Tree_ED:forwardConnect(encoder_core,decoder_core,inputSeqLen)
@@ -454,16 +317,9 @@ end
 function Tree2Tree_ED:forward(enc_input,dec_input)
   local enc_output = nil
   local dec_output = {}
-  --if self.encoder_topology == 'tree' then
-    --local embedded_sent = self.encoder:forward_sent(enc_input.sent)
   if self.encoder_topology == 'seq' then
     enc_output = self.encoder:forward(enc_input.sent)
   end
-  -- print(enc_input.sent)
-  -- print(enc_output[1])
-  --bk()
-
-  -- TODO: Will have to modify TreeLSTM to account for this.
 
   debugutils.checkpoint(self,'F:E')
   local input_size = (enc_input.sent) and enc_input.sent:size(1) or enc_input:size(1)
@@ -472,10 +328,6 @@ function Tree2Tree_ED:forward(enc_input,dec_input)
   if Debug > 0 then
     -- Add word index info to tree, for debug printing
     dec_input.tree:labelNodes(dec_input.sent)
-    -- local nodes = dec_input.tree:depth_first_preorder()
-    -- for i,v in ipairs(nodes) do
-    --   print(i,v.label)
-    -- end
   end
   if self.decoder_topology == 'tree' then
     self.decoder:setInitialTree(dec_input.tree) -- might be changed after decoder core forward
@@ -486,10 +338,7 @@ function Tree2Tree_ED:forward(enc_input,dec_input)
 end
 
 function Tree2Tree_ED:backward(enc_input,dec_input,grad_output)
-  --if self.decoder_topology == 'seq' then
   self.decoder:backward(dec_input.sent,grad_output)
-  --self.decoder:backward(dec_input.sent,dec_input.tree,grad_decoder)
-  --debugutil.dprintf(0,"~ Checkpoint ED: backward decoder. || gradPrimingState || = %8.2f\n",self.decoder.gradPrimingState:norm(1))
   debugutils.checkpoint(self,'B:D')
   self:backwardConnect(self.encoder.core,self.decoder.core)
   debugutils.checkpoint(self,'B:BC')
@@ -499,17 +348,6 @@ function Tree2Tree_ED:backward(enc_input,dec_input,grad_output)
                         or {zeroTensor, zeroTensor}
   self.encoder:backward(enc_input.sent,zeroTensorGrad)
   debugutils.checkpoint(self,'B:E')
-
-  --TODO: I backward changed this from what
-  -- is below. Update Tree encoders to deal with this.
-  -- if self.encoder_topology== 'seq' then
-  --   local zeroTensor = torch.Tensor(self.encoder.output):zero() -- a bit ugly. TODO: Get rid of this?
-  --   self.encoder:backward(enc_input.sent,zeroTensor)
-  -- else
-  --   local zeroTensor = torch.Tensor(self.encoder.output):zero() -- a bit ugly. TODO: Get rid of this?
-  --   self.encoder:backward(enc_input.tree,enc_input.sent,{zeroTensor,zeroTensor})
-  -- end
-  --debugutil.dprint(1,"~ Checkpoint ED: backward encoder")
 end
 
 
@@ -520,8 +358,6 @@ end
     - a table corresponding to the sentence (for sequence topologies)
     - a "dictionary" of sentence (table) and tree (Tree)
 ]]--
-
-
 function Tree2Tree_ED:prepare_inputs(source, target) -- target is optional
   local enc_input, dec_input, dec_gold
   local et,dt = self.encoder_topology, self.decoder_topology
@@ -554,7 +390,6 @@ function Tree2Tree_ED:prepare_prediction_inputs(tree, sent)
   return enc_input
 end
 
-
 function Tree2Tree_ED:prepare_inputs_criterion(dec_output,dec_gold)
   local et,dt = self.encoder_topology, self.decoder_topology
   local input_to_criterion = (dt == 'tree') and
@@ -563,9 +398,7 @@ function Tree2Tree_ED:prepare_inputs_criterion(dec_output,dec_gold)
   return input_to_criterion, gold_to_criterion
 end
 
-
 function Tree2Tree_ED:train(dataset)
-  --self.train = true
   self.encoder:training()
   self.decoder:training()
   local indices = torch.randperm(dataset.size)
@@ -577,14 +410,8 @@ function Tree2Tree_ED:train(dataset)
     -- A function to give to adagrad as input.
     local feval = function(x)
       -- Use either:
-      self.grad_params:zero()  --- Now that I have the consistent module, this should work too.
+      self.grad_params:zero()
       assert(self.grad_params:norm() == 0, "Non zero gradients")
-
-      -- -- or
-      --self.encoder:zeroGradParameters()
-      --self.decoder:zeroGradParameters()
-      --self.decoder_core:forget()
-      --
 
       local loss = 0
       for j = 1, batch_size do
@@ -597,12 +424,6 @@ function Tree2Tree_ED:train(dataset)
         debugutils.debug_inputs(1,enc_input, dec_input, dec_gold,
         self.encoder_topology, self.decoder_topology)
 
-
-        -- DEBUG TREE COPY:
-        -- local tree2 = tree2tree.LRTree():copy(dec_input.tree)
-        -- tree2:print_preorder(dec_input.sent)
-
-
         --  FORWARD PASS --
         -- loss will be nil unless decoder is tree-(s|d)tp model
         local dec_output = self:forward(enc_input, dec_input)
@@ -612,11 +433,6 @@ function Tree2Tree_ED:train(dataset)
         else
           example_topo_loss = nil
         end
-        --print(example_topo_loss);
-        -- local example_topo_loss
-        -- if self.decoder_topology == 'tree' and self.decoder_model ~= 'ntp' then
-        --   dec_output,  = unpack(dec_output)
-        -- end
 
         debugutils.debug_outputs(1,dec_input, dec_gold,dec_output,self)
 
@@ -646,17 +462,12 @@ function Tree2Tree_ED:train(dataset)
       loss = loss / batch_size
       self.grad_params:div(batch_size) -- Divide collected grad info by batch size
 
-      -- regularization
-      -- self.enc_grad_params:add(self.reg, self.enc_params)
-      -- self.dec_grad_params:add(self.reg, self.dec_params)
-      -- TODO: Clip before or ater reg?
       if self.grad_clip > 0 then
         self.grad_params:clamp(-self.grad_clip, self.grad_clip)
       end
 
       loss = loss + 0.5 * self.reg * self.params:norm() ^ 2
       self.grad_params:add(self.reg, self.params)
-      --debugutil.dprint(2,torch.max(self.enc_grad_params), torch.max(self.dec_grad_params))
       return loss, self.grad_params
     end -- feval
 
@@ -665,22 +476,18 @@ function Tree2Tree_ED:train(dataset)
     else
       optim.adagrad(feval, self.params, self.optim_state)
     end
-    -- self.decoder:forget()
-    -- self.encoder:forget()
-    -- self.decoder.core:forget()
     self:forget()
-    if i % 1 == 0 then
-      collectgarbage()  --  This should not be necessary!!! Find the memory leak
+    if i % 10 == 0 then
+      -- Clean up every few iters - trees seem to leak memory
+      collectgarbage()  --
       collectgarbage()  --
     end
   end -- batch iterator
   xlua.progress(dataset.size, dataset.size)
-
 end -- train
 
 
 --[[ Given a source sentence (and tree) predict target sentence
-
     TODO: This function should probably live somwhere else. It will very likely
     depend on the decoder topology, so it should either be an attribute of the
     decoder itself, or the decoder class.
@@ -724,22 +531,6 @@ function Tree2Tree_ED:predict_target(enc_input,vocab_tgt,debug)
   return predicted, probabilities
 end
 
--- -- Produce similarity predictions for each sentence pair in the dataset.
--- function Tree2Tree_ED:predict_dataset(dataset,vocab_tgt)
---   self.encoder:evaluate()
---   self.decoder:evaluate()
---   --local predictions = torch.Tensor(dataset.size) -- TODO: Change to other structure? DIms?
---   local predictions = {}
---   for i = 1, dataset.size do
---     xlua.progress(i, dataset.size)
---     local source_sent, source_tree = dataset.sents[i].source, dataset.trees[i].source
---     local preds,probs = self:predict_target(source_tree,source_sent,vocab_tgt)
---     predictions[i] = preds
---   end
---
---   return predictions
--- end
-
 --[[ Compute loss for an example source-target pair (same criterion used as in trainin,
     i.e. With teacher forcing. ]]--
 function Tree2Tree_ED:compute_example_loss(enc_input,dec_input,dec_gold, do_topoloss)
@@ -755,19 +546,6 @@ function Tree2Tree_ED:compute_example_loss(enc_input,dec_input,dec_gold, do_topo
 
   local criterion_input, criterion_target = self:prepare_inputs_criterion(dec_output,dec_gold)
   local example_loss = self.criterion:forward(criterion_input, criterion_target)
-
-
-  -- if self.criterion_type == 'seq' then
-  --   assert(#dec_output == #dec_gold.sent,"Error: Output and target sentences have \
-  --   different sizes" .. tostring(#dec_output) .. '~=' .. tostring(#dec_gold.sent))
-  -- else
-  --   assert(self.decoder_core.outputTree:size() == dec_gold.tree:size(),
-  --   "Error: Output and target trees have different sizes")
-  -- end
-  -- local input_to_criterion = (self.decoder_topology == 'tree') and
-  -- {sent = dec_output, tree=self.decoder_core.outputTree} or dec_output
-  -- local gold_to_criterion = (self.decoder_topology == 'tree') and dec_gold or dec_gold.sent
-  -- local example_loss = self.criterion:forward(input_to_criterion, gold_to_criterion)
   self:forget()
   return example_loss, example_topo_loss
 end
@@ -783,16 +561,13 @@ function Tree2Tree_ED:compute_loss(dataset)
     local enc_input, dec_input, dec_gold =
                           self:prepare_inputs(dataset.source[i],dataset.target[i])
     local example_loss, example_topo_loss
-
-    --print(i)
-    --print(dec_input.sent)
     example_loss, example_topo_loss = self:compute_example_loss(
     enc_input, dec_input, dec_gold, do_topoloss)
     if example_topo_loss then debugutils.dprint(1,example_loss, example_topo_loss)
     else debugutils.dprint(1,example_loss) end
     loss = loss + example_loss
     if example_topo_loss then topo_loss = topo_loss + example_topo_loss end
-    collectgarbage()  --  This should not be necessary!!! Find the memory leak
+    collectgarbage()
   end
   loss = loss / dataset.size  -- average to get mean example loss
   if do_topoloss then
@@ -808,7 +583,6 @@ function Tree2Tree_ED:print_config()
   local enc_top_string = self.encoder_topology
 
   if self.lr_tree then dec_top_string = dec_top_string .. ' (left-right)' end
-  --local num_sim_params = self:new_sim_module():getParameters():size(1)
   printf('%-25s = %d\n','num params', num_params)
   printf('%-25s = %d\n','    - encoder   ', self.enc_params:size(1))
   printf('%-25s = %d\n','    - decoder   ', self.dec_params:size(1))
@@ -821,8 +595,6 @@ function Tree2Tree_ED:print_config()
   printf('%-25s = %s\n','    - recurrence', self.decoder_recurrence)
   printf('%-25s = %s\n','    - model     ', self.decoder_model)
 
-  --if self.decoder_topology == 'tree' then self.decoder:print_config() end
-  --printf('%-25s = %d\n',   'num compositional params', num_params - num_sim_params)
   printf('%-25s = %d\n',   'source word vector dim', self.source_emb_dim)
   printf('%-25s = %d\n',   'target word vector dim', self.target_emb_dim)
   printf('%-25s = %d\n',   'memory dim', self.mem_dim)
@@ -832,8 +604,6 @@ function Tree2Tree_ED:print_config()
   printf('%-25s = %.2e\n', 'learning rate', self.learning_rate)
   printf('%-25s = %.2e\n', 'word vector learning rate', self.emb_learning_rate)
 
-  --printf('%-25s = %s\n',   'parse tree type', self.topology)
-  --printf('%-25s = %d\n',   'sim module hidden dim', self.sim_nhidden)
 end
 
 --
@@ -841,19 +611,6 @@ end
 --
 
 function Tree2Tree_ED:save(path)
-  -- local config = {
-  --   batch_size        = self.batch_size,
-  --   -- emb_vecs          = self.emb.weight:float(),
-  --   --tgt_emb_vecs      = self.tgt_emb_module.weight:float(),
-  --   --tgt_emb_vecs      = self.src_emb_module.weight:float(),
-  --   learning_rate     = self.learning_rate,
-  --   --emb_learning_rate = self.emb_learning_rate,
-  --   mem_dim           = self.mem_dim,
-  --   sim_nhidden       = self.sim_nhidden,
-  --   reg               = self.reg,
-  --   lr_tree           = self.lr_tree
-  --   --topology     = self.topology,
-  -- }
   local config = self.config
   torch.save(path, {
     params = self.params,
@@ -870,8 +627,6 @@ end
 
 
 function Tree2Tree_ED:predict_dataset(format, dataset, maxpred)
-  --self.train = true
-  -- local num_pred_examples = opt.maxpred or #test_dataset.sents
   local predictions = {}
   local to_predict = maxpred or #dataset
   self:predicting()
@@ -888,7 +643,7 @@ function Tree2Tree_ED:predict_dataset(format, dataset, maxpred)
       local str_pred = ntTree2logical(pred_tree,true,pred_sent,self.target_vocab)
       table.insert(predictions,str_pred)
     end
-    collectgarbage()  --  This should not be necessary!!! Find the memory leak
+    collectgarbage()
   end
   self:training()
   return predictions
@@ -934,7 +689,6 @@ function Tree2Tree_ED:newPrimingTree()
   end
   local primingTree = (self.lr_tree) and tree2tree:LRTree():copy(self.primingTree,"full")
                                       or tree2tree:Tree():copy(self.primingTree,"full")
-  --self.primingTree:print_preorder()
   return primingTree
 end
 
@@ -961,7 +715,6 @@ function Tree2Tree_ED:newIFTTTPrimingTree()
   end
   local primingTree = (self.lr_tree) and tree2tree:LRTree():copy(self.primingTree,"full")
                                       or tree2tree:Tree():copy(self.primingTree,"full")
-  --self.primingTree:print_preorder()
   return primingTree
 end
 
@@ -1004,13 +757,6 @@ function Tree2Tree_ED:tree_sampling(format, enc_input, dec_gold, verbose)
     printf('%-35s\n\t%s\n','Source sentence string:',table.concat(self.source_vocab:reverse_map(src_table,true),' '))
     printf('\t%s\n',table.concat(src_table,' '))
   end
-  -- print(enc_input.sent)
-  -- print(self.encoder:forward(enc_input.sent)[1])
-
-  -- self.encoder:evaluate()
-  -- self.decoder.core:predicting()
-  -- self.decoder.prediction_module:predicting()
-
 
   -- Need to give "super powers" to DRNN
   self.decoder.core.embedder = self.tgt_emb_module
@@ -1033,13 +779,7 @@ function Tree2Tree_ED:tree_sampling(format, enc_input, dec_gold, verbose)
       self.decoder.core.tree = self:newPrimingTree()
     end
   end
-  --print(torch.totable(priming_sent))
-
-  --self.decoder.core.tree:print_offspring_layers(self.target_vocab:reverse_map(torch.totable(priming_sent)))
-
-  --self.decoder:setInitialTree(dec_input.tree) -- might be changed after decoder core forward
   enc_out = self.encoder:forward(enc_input.sent) -- We pass encoder input as is
-  --print('Done encoding')
   local input_size = (enc_input.sent) and enc_input.sent:size(1) or enc_in:size(1)
   self:forwardConnect(self.encoder.core,self.decoder.core,input_size)
 
@@ -1051,20 +791,6 @@ function Tree2Tree_ED:tree_sampling(format, enc_input, dec_gold, verbose)
   local dec_out_tree = dec_out[1]
   local dec_out_sent = dec_out[2]
   local dec_output_logprob = dec_out[3]
-  --print('Tree break-down:')
-  --dec_out_tree:print_preorder(self.target_vocab:reverse_map(dec_out_sent))
-
-  -- TODO: MOve vack to target vocab after debug, and move back padding to DRNN predicting last step
-  --dec_out_tree = dec_out_tree:prune_padding_leaves('SOS',self.source_vocab:reverse_map(dec_out_sent))
-  --dec_out_tree:print_preorder(dec_out_sent)
-
-  -- local predict_debug = 0
-  -- if predict_debug > 1 then
-  --   dec_out_tree:print_preorder(self.target_vocab:reverse_map(dec_out_sent))
-  --   --bk('Line 980 Tree2TreeED')
-  -- end
-
-  -- TODO: Should prune_padding_leaves be here? Is there any case where we don't want the prediciton pruned?
 
   if verbose > 0 then
     printf('%-35s \t %8.2f\n','Predicted output logprob:',dec_output_logprob)
@@ -1084,28 +810,11 @@ function Tree2Tree_ED:tree_sampling(format, enc_input, dec_gold, verbose)
     printf('%-35s \n\t','Gold (linearized) sentence:')
     dec_gold.tree:print_lexical_order(self.target_vocab:reverse_map(gold_table))
     if print_tokenids then
-      --printf('\t%s\n',table.concat(gold_table,' '))
       printf('\t')
       dec_gold.tree:print_lexical_order(dec_gold.sent)
     end
   end
-
-
-  -- print('Branch-sentences:')
-  -- display_tree:print_offspring_layers(vocab:reverse_map(sent))
-  -- FIXME
-  -- self.decoder.core:forget()
-  -- self.encoder:forget()
-  -- self.decoder:forget()
-
   self:forget()
-
-  -- NOTE: I commented this out. Now it's done externally, so that many examples
-  -- can be sampled without having to call training() and predicting() everytime in between
-  --self.decoder.core:training()
-  --self.decoder.prediction_module:training()
-  --assert(not (self.decoder.core.predict or self.decoder.prediction_module.predict), "Not cleared predict")
-  --assert(self.decoder.core.train and self.decoder.prediction_module.train, "Not cleared predict")
   return dec_out_tree, dec_out_sent, dec_output_logprob
 end
 
@@ -1115,15 +824,12 @@ function Tree2Tree_ED:sequence_sampling(enc_input, dec_input, dec_gold)
   print("Sampling sentence...")
 
   local src_table = (enc_input.sent) and torch.totable(enc_input.sent) or torch.totable(enc_in)
-  --local gold_table = torch.totable(dec_gold.sent)
   printf('%-35s %s\n\t','Source sentence string:',table.concat(self.source_vocab:reverse_map(src_table,true),' '))
 
   self.decoder.core:evaluate()
   self.decoder.prediction_module:evaluate()
 
   -- Need to give "super powers" to DRNN
-  --self.decoder_core.embedder = self.tgt_emb_module
-  --self.decoder_core.topologyModule = self.decoder.prediction_module
   self.sampler = tree2tree.Sampler({sample_mode = 'temp', temperature=1})
 
   local priming_sent = self:newPrimingSent()
@@ -1133,13 +839,8 @@ function Tree2Tree_ED:sequence_sampling(enc_input, dec_input, dec_gold)
   local input_size = (enc_input.sent) and enc_input.sent:size(1) or enc_input:size(1)
   self:forwardConnect(self.encoder.core,self.decoder.core,input_size)
 
-
   dec_out_sent, dec_out_pobs = self.sampler:sequence_sampler(self.tgt_emb_module,self.decoder.core,
     self.decoder.prediction_module,priming_sent,self.target_vocab.end_index)
-
-
-  --print('Tree break-down:')
-  --dec_out_tree:print_preorder(self.target_vocab:reverse_map(dec_out_sent))
 
   printf('%-35s ','Predicted sentence:  ')
   print(table.concat(self.target_vocab:reverse_map(dec_out_sent),' '))
@@ -1147,19 +848,13 @@ function Tree2Tree_ED:sequence_sampling(enc_input, dec_input, dec_gold)
   printf('%-35s ','Gold sentence:  ')
   print(table.concat(self.target_vocab:reverse_map(dec_gold.sent),' '))
 
-  -- print('Branch-sentences:')
-  -- display_tree:print_offspring_layers(vocab:reverse_map(sent))
-
-  -- FIXME
 
   self:forget()
-  --self.decoder.core:forget()
   self.decoder.prediction_module:forget()
 
   self.decoder.core:training()
   self.decoder.prediction_module:training()
 
-  --assert(not (self.decoder_core.predict or self.decoder.prediction_module.predict), "Not cleared predict")
   assert(self.decoder.core.train and self.decoder.prediction_module.train, "Not cleared predict")
 end
 
@@ -1180,7 +875,6 @@ function Tree2Tree_ED:forget()
   else
     self.encoder:forget()
   end
-  --self.decoder:forget() -- This doesnt do anything. FIXME
   self.decoder.core:forget()
   self.decoder.prediction_module:forget()
 end

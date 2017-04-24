@@ -1,14 +1,12 @@
-
 local TreePredictionLayer, parent = torch.class('tree2tree.TreePredictionLayer', 'nn.Module')
 
 --[[
-
+  The last layer in a DRNN cell. Used mostly for handling prediction of label and topology.
   Behavior changes:
     - during training, it computes a loss of input topology probablities and replaces them
       with true topologial features, passes these to SoftMax
     - during prediction, it first predicts binary topo features using probs and passes these
       to softmaxe module
-
 ]]--
 
 function TreePredictionLayer:__init(model,target_dim, lr_tree)
@@ -23,7 +21,6 @@ function TreePredictionLayer:__init(model,target_dim, lr_tree)
   self.sample_mode_prediction = 'max' -- ['max','sample']. For binary decisions in topology modules
 
   self.predict = false -- turn on to trigger prediction behavior
-
 
   local softmax
   if self.model == 'ntp' then
@@ -62,8 +59,6 @@ function TreePredictionLayer:model_stp_softmax()
   local p1 = nn.ParallelTable()
               :add(nn.Identity())
               :add(nn.Linear(1,self.target_dim))
-              -- :add(nn.LookupTable(2,self.target_dim))
-              -- :add(nn.LookupTable(2,self.target_dim))
   local softmax = nn.Sequential()
             :add(p1)
             :add(nn.CAddTable())
@@ -111,15 +106,12 @@ function TreePredictionLayer:model_dtp_lr_softmax()
               :add(nn.Linear(1,self.target_dim))
               :add(nn.Linear(1,self.target_dim))
               :add(nn.Linear(1,self.target_dim))
-              -- :add(nn.LookupTable(2,self.target_dim))
-              -- :add(nn.LookupTable(2,self.target_dim))
   local softmax = nn.Sequential()
             :add(p1)
             :add(nn.CAddTable())
             :add(nn.LogSoftMax())
   return softmax
 end
-
 
 -- Reusable function to unpack input, check it has the correct number of elements, etc
 function TreePredictionLayer:process_inputs(input)
@@ -264,14 +256,9 @@ end
       -- In predict mode: {tensor, tensor, tensor}
 ]]--
 function TreePredictionLayer:updateOutput(input)
-  --print('Hello from pred layer')
-  --debugutils.print_tensor_info(1,input)
-
   -- Unpack inputs according to model.
   local output, combined_loss, table_output, input_to_softmax
   local word_output, prob_a, prob_f = self:process_inputs(input)
-
-  --print('Entering tree pred layer with mode:' .. (self.predict and 'prediction' or 'train/eval'))
   if self.predict ~= true then -- train mode
     if self.model == 'ntp' then
       input_to_softmax = self:process_softmax_train(word_output)
@@ -328,112 +315,11 @@ function TreePredictionLayer:updateGradInput(input, gradOutput)
   return self.gradInput
 end
 
--- Old pre decoupled LR version:
--- function TreePredictionLayer:updateGradInput(input, gradOutput)
---   local gradInput
---   local word_output = (self.model == 'ntp') and input or input[1]
---   local prob_f      = (self.model == 'dtp') and input[3]
---   local input_to_softmax
---   if self.model == 'ntp' then
---     input_to_softmax = input
---     gradInput = self.softmax:backward(input_to_softmax, gradOutput)
---   else -- STP/DTP: Will use topological arguments
---     assert(self.num_children and (self.has_brother ~= nil), "Topological arguments not passed correctly")
---     local prob_a  = input[2]
---     local gold_a_bin = (self.num_children > 0) and torch.Tensor(1):fill(1) or torch.zeros(1)
---     local gold_a_bin = (self.num_children > 0) and torch.Tensor(1):fill(1) or torch.zeros(1)
---
---     local grad_topo_a = self.topo_criterion_depth:backward(prob_a,gold_a_bin)
---     if self.model == 'stp' then
---       assert(#input == 2, "Input to TreePredictionLayer with wrong number of elements")
---       input_to_softmax = {input[1], gold_a_bin}
---       grad_word = self.softmax:backward(input_to_softmax, gradOutput)[1]
---       gradInput = {grad_word, grad_topo_a}
---     elseif self.model == 'dtp' then
---       assert(#input == 3, "Input to TreePredictionLayer with wrong number of elements")
---       local prob_f  = input[3]
---       local gold_f_bin = (self.has_brother) and torch.Tensor(1):fill(1) or torch.zeros(1)
---       local grad_topo_f = self.topo_criterion_width:backward(prob_f,gold_f_bin)
---       input_to_softmax = {input[1], gold_a_bin, gold_f_bin}
---       grad_word = self.softmax:backward(input_to_softmax, gradOutput)[1]
---
---       debugutils.debug_topo_grad(1,input_to_softmax,prob_a,prob_f,gold_a_bin,
---       gold_f_bin,grad_topo_a,grad_topo_f,grad_word)
---
---       gradInput = {grad_word, grad_topo_a, grad_topo_f}
---     else
---       print("Error: unrecognized model")
---     end
---   end
---   self.gradInput = gradInput
---   return self.gradInput
--- end
-
 function TreePredictionLayer:accGradParameters(input, gradOutput, scale)
   local word_output, prob_a, prob_f = self:process_inputs(input)
   local input_to_softmax = self:process_softmax_train(word_output, prob_a, prob_f,'accGrad')
   self.softmax:accGradParameters(input_to_softmax, gradOutput, scale)
 end
-
-
-
-
--- Pre-decoupled version
--- function TreePredictionLayer:accGradParameters(input, gradOutput, scale)
---   local gradInput
---   local word_output = (self.model == 'ntp') and input or input[1]
---   local prob_f   = (self.model == 'dtp') and input[3]
---   local input_to_softmax
---   if self.model == 'ntp' then
---     input_to_softmax = input
---     gradInput = self.softmax:backward(input_to_softmax, gradOutput)
---   else -- STP/DTP: Will use topological arguments
---     assert(self.num_children and (self.has_brother ~= nil), "Topological arguments not passed correctly")
---     local prob_a  = input[2]
---     local gold_a_bin = (self.num_children > 0) and torch.Tensor(1):fill(1) or torch.zeros(1)
---     --self.topo_criterion_depth:accGradParameters(prob_a,gold_a_bin, scale)
---     if self.model == 'stp' then
---       assert(#input == 2, "Input to TreePredictionLayer with wrong number of elements")
---       input_to_softmax = {input[1], gold_a_bin}
---     elseif self.model == 'dtp' then
---       assert(#input == 3, "Input to TreePredictionLayer with wrong number of elements")
---       local prob_f  = input[3]
---       local gold_f_bin = (self.has_brother) and torch.Tensor(1):fill(1) or torch.zeros(1)
---       --self.topo_criterion_width:accGradParameters(prob_f,gold_f_bin, scale)
---       input_to_softmax = {input[1], gold_a_bin, gold_f_bin}
---     else
---       print("Error: unrecognized model")
---     end
---   end
---   self.softmax:accGradParameters(input_to_softmax, gradOutput, scale)
--- end
-
-
--- function TreePredictionLayer:accGradParameters(input, gradOutput, scale)
---   assert(self.num_children and (self.has_brother ~= nil), "Topological arguments not passed correctly")
---   local gradInput
---   local word_output = (self.model == 'ntp') and input or input[1]
---   local prob_a  = (self.model ~= 'ntp') and input[2]
---   local prob_f   = (self.model == 'dtp') and input[3]
---   local gold_a_bin = (self.num_children > 0) and torch.Tensor(1):fill(1) or torch.zeros(1)
---   local gold_f_bin = (self.has_brother) and torch.Tensor(1):fill(1) or torch.zeros(1)
---   local input_to_softmax
---   if self.model == 'ntp' then
---     input_to_softmax = input
---   elseif self.model == 'stp' then
---     assert(#input == 2, "Input to TreePredictionLayer with wrong number of elements")
---     input_to_softmax = {input[1], gold_a_bin}
---   elseif self.model == 'dtp' then
---     assert(#input == 3, "Input to TreePredictionLayer with wrong number of elements")
---     input_to_softmax = {input[1], gold_a_bin, gold_f_bin}
---   else
---     print("Error: unrecognized model")
---   end
---   local grad_topo_a = (self.model ~= 'ntp') and self.topo_criterion_depth:backward(prob_a,gold_a_bin)
---   local grad_topo_f = (self.model == 'dtp') and self.topo_criterion_width:backward(prob_f,gold_f_bin)
---   self.softmax:accGradParameters(input_to_softmax, gradOutput, scale)
--- end
-
 
 function TreePredictionLayer:training()
   self.train   = true
