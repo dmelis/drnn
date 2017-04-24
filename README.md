@@ -1,5 +1,6 @@
 # drnn
-Doubly-recurrent neural networks
+
+Code for paper: ["Tree structured-decodin with doubly-recurrent neural networks"](http://people.csail.mit.edu/davidam/docs/ICLR2017_Tree.pdf)
 
 
 ### Dependencies
