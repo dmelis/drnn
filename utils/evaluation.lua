@@ -17,7 +17,6 @@ function is_all_same(c1,c2)
   end
 end
 
-
 function display_accuracy(dataset, acc_type, stats)
   if dataset == 'IFTTT' then
     printf('Accuracy: %4.2f channel, %4.2f function, %4.2f chan+func\n',

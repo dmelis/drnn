@@ -1,0 +1,13 @@
+*.out
+*.*~
+*.log
+*.aux
+*.bbl
+*.pyc
+*.blg
+*.synctex.gz
+*.tdo
+lib/stanford-corenlp/*
+trained_models/*
+predictions/*
+result_logs/*
